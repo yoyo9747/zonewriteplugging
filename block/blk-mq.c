@@ -2936,7 +2936,7 @@ void blk_mq_submit_bio(struct bio *bio)
 	unsigned int nr_segs = 1;
 	struct request *rq;
 	blk_status_t ret;
-	printk("blk_mq_submit_bio - block/blk-mq.c\n");
+
 	/*
 	 * If the plug has a cached request for this queue, try to use it.
 	 */
@@ -2949,6 +2949,7 @@ void blk_mq_submit_bio(struct bio *bio)
 	 * the target zone. Go straight to preparing a request for it.
 	 */
 	if (bio_zone_write_plugging(bio)) {
+		printk("if (bio_zone_write_plugging(bio)) - blk_mq_submit_bio - block/blk-mq.c\n");
 		nr_segs = bio->__bi_nr_segments;
 		if (rq)
 			blk_queue_exit(q);
