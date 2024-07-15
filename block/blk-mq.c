@@ -2936,7 +2936,7 @@ void blk_mq_submit_bio(struct bio *bio)
 	unsigned int nr_segs = 1;
 	struct request *rq;
 	blk_status_t ret;
-
+	printk("blk_mq_submit_bio - block/blk-mq.c\n");
 	/*
 	 * If the plug has a cached request for this queue, try to use it.
 	 */
