@@ -476,13 +476,15 @@ static bool disk_insert_zone_wplug(struct gendisk *disk,
 	unsigned long flags;
 	unsigned int idx =
 		hash_32(zwplug->zone_no, disk->zone_wplugs_hash_bits);
-
 	/*
 	 * Add the new zone write plug to the hash table, but carefully as we
 	 * are racing with other submission context, so we may already have a
 	 * zone write plug for the same zone.
 	 */
 	spin_lock_irqsave(&disk->zone_wplugs_lock, flags);
+	int value;
+	value=atomic_read(&(zwplug->ref));
+	printk("disk_insert_zone_wplug / REF: %d\n",value);
 	hlist_for_each_entry_rcu(zwplg, &disk->zone_wplugs_hash[idx], node) {
 		if (zwplg->zone_no == zwplug->zone_no) {
 			spin_unlock_irqrestore(&disk->zone_wplugs_lock, flags);
@@ -505,6 +507,9 @@ static struct blk_zone_wplug *disk_get_zone_wplug(struct gendisk *disk,
 	rcu_read_lock();
 
 	hlist_for_each_entry_rcu(zwplug, &disk->zone_wplugs_hash[idx], node) {
+		//int value;
+		//value=atomic_read(&(zwplug->ref));
+		//printk("disk_get_zone_wplug / REF: %d\n",value);
 		if (zwplug->zone_no == zno &&
 		    atomic_inc_not_zero(&zwplug->ref)) {
 			rcu_read_unlock();
@@ -528,6 +533,9 @@ static void disk_free_zone_wplug_rcu(struct rcu_head *rcu_head)
 static inline void disk_put_zone_wplug(struct blk_zone_wplug *zwplug)
 {
 	if (atomic_dec_and_test(&zwplug->ref)) {
+		//int value;
+		//value=atomic_read(&(zwplug->ref));
+		//printk("disk_put_zone_wplug / REF: %d\n",value);
 		WARN_ON_ONCE(!bio_list_empty(&zwplug->bio_list));
 		WARN_ON_ONCE(!list_empty(&zwplug->link));
 		WARN_ON_ONCE(!(zwplug->flags & BLK_ZONE_WPLUG_UNHASHED));
@@ -539,6 +547,7 @@ static inline void disk_put_zone_wplug(struct blk_zone_wplug *zwplug)
 static inline bool disk_should_remove_zone_wplug(struct gendisk *disk,
 						 struct blk_zone_wplug *zwplug)
 {
+	printk("disk_should_remove_zone_wplug\n");
 	/* If the zone write plug was already removed, we are done. */
 	if (zwplug->flags & BLK_ZONE_WPLUG_UNHASHED)
 		return false;
@@ -569,6 +578,7 @@ static void disk_remove_zone_wplug(struct gendisk *disk,
 				   struct blk_zone_wplug *zwplug)
 {
 	unsigned long flags;
+	printk("disk_remove_zone_wplug\n");
 
 	/* If the zone write plug was already removed, we have nothing to do. */
 	if (zwplug->flags & BLK_ZONE_WPLUG_UNHASHED)
@@ -598,6 +608,7 @@ static struct blk_zone_wplug *disk_get_and_lock_zone_wplug(struct gendisk *disk,
 {
 	unsigned int zno = disk_zone_no(disk, sector);
 	struct blk_zone_wplug *zwplug;
+	//printk("disk_get_and_lock_zone_wplug\n");
 
 again:
 	zwplug = disk_get_zone_wplug(disk, sector);
@@ -622,6 +633,7 @@ again:
 	 * so that it is not freed when the zone write plug becomes idle without
 	 * the zone being full.
 	 */
+	printk("zwplug not allocated in disk_get_and_lock_zone_wplug\n");
 	zwplug = mempool_alloc(disk->zone_wplugs_pool, gfp_mask);
 	if (!zwplug)
 		return NULL;
@@ -889,6 +901,7 @@ void blk_zone_write_plug_bio_merged(struct bio *bio)
 	struct blk_zone_wplug *zwplug;
 	unsigned long flags;
 
+	printk("blk_zone_write_plug_bio_merged\n");
 	/*
 	 * If the BIO was already plugged, then we were called through
 	 * blk_zone_write_plug_init_request() -> blk_attempt_bio_merge().
@@ -931,7 +944,8 @@ void blk_zone_write_plug_init_request(struct request *req)
 		disk_get_zone_wplug(disk, blk_rq_pos(req));
 	unsigned long flags;
 	struct bio *bio;
-
+	
+	printk("blk_zone_write_plug_init_request\n");
 	if (WARN_ON_ONCE(!zwplug))
 		return;
 
@@ -1043,7 +1057,7 @@ static bool blk_zone_wplug_handle_write(struct bio *bio, unsigned int nr_segs)
 	struct blk_zone_wplug *zwplug;
 	gfp_t gfp_mask = GFP_NOIO;
 	unsigned long flags;
-
+	printk("blk_zone_wplug_handle_write\n");
 	/*
 	 * BIOs must be fully contained within a zone so that we use the correct
 	 * zone write plug for the entire BIO. For blk-mq devices, the block
@@ -1075,6 +1089,9 @@ static bool blk_zone_wplug_handle_write(struct bio *bio, unsigned int nr_segs)
 		bio_io_error(bio);
 		return true;
 	}
+	int value;
+	value=atomic_read(&(zwplug->ref));
+	printk("zone_wplug / REF: %d / WP: %u\n",value,zwplug->wp_offset);
 
 	/* Indicate that this BIO is being handled using zone write plugging. */
 	bio_set_flag(bio, BIO_ZONE_WRITE_PLUGGING);
@@ -1100,6 +1117,7 @@ static bool blk_zone_wplug_handle_write(struct bio *bio, unsigned int nr_segs)
 	return false;
 
 plug:
+	printk("Zone is already plugged!\n");
 	zwplug->flags |= BLK_ZONE_WPLUG_PLUGGED;
 	blk_zone_wplug_add_bio(zwplug, bio, nr_segs);
 
